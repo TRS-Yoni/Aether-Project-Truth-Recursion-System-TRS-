@@ -1,147 +1,107 @@
 
 
-#### Repository Structure
-```
-aether-trs/
-├── aether_trs.py         # TRS main code
-├── givers_module.py      # Givers module code
-├── data/
-│   └── sample_questions.csv  # Initial sample questions (50 entries)
-├── tests/
-│   └── test_trs.py       # Unit tests
-├── README.md             # Project description
-├── requirements.txt      # Dependencies
-└── LICENSE               # MIT License
-```
+## 📘 `README.md` 
 
-#### README.md
-```
-# Aether Project
-A high-dimensional ethics system by Yoni (a dropout from South Korea, no budget).
-- **TRS (Truth Recursion System)**: Decodes emotions, reframes with philosophy (Nietzsche, Kant, Quran 49:13), aligns with dignity and trust.
-- **Givers Module**: Turns anger into a truth alarm, integrates MBTI, culture, and religion.
-- **Tech**: NLP (via transformers) + blockchain (Ethereum contract ready).
-- **Goal**: AGI companion + blockchain governance.
-- **Usage**: Run `python aether_trs.py` with input (e.g., "Why am I angry?").
-- **Contribute**: Test TRS, add data, or DM @yoni_aether on X.
-- **License**: MIT
+````markdown
+# 🌌 Aether Project – TRS (Truth Recursion System)
 
-## Setup
+> Designed by Yoni, a South Korean dropout building AGI ethics without budget — only truth.
+
+---
+
+## 💡 What is TRS?
+
+**TRS (Truth Recursion System)** is a logic system that:
+- Decodes emotional input
+- Detects distorted thought loops
+- Reframes the emotion using philosophy (Nietzsche, Kant, Quran, etc.)
+- Aligns the output with truth-based design values (Trust, Dignity, Connectivity)
+
+This project is part of the **Aether Project**, a broader framework for AI ethics, emotional cognition, and decentralized truth governance.
+
+---
+
+## ⚙️ Core Modules
+
+| File | Description |
+|------|-------------|
+| `aether_trs.py` | Main pipeline: emotion analysis → reframing → truth alignment |
+| `givers_module.py` | Givers module: Treats **anger as a truth alarm** |
+| `data/sample_questions.csv` | Sample emotional queries for testing |
+| `tests/test_trs.py` | Unit tests for core logic |
+| `requirements.txt` | Python dependencies |
+| `README.md` | This file |
+| `LICENSE` | MIT License |
+
+---
+
+## 🧠 Philosophy Behind TRS
+
+- **Nietzsche**: “Will to power” as reframed agency  
+- **Kant**: “Categorical imperative” for design alignment  
+- **Quran 49:13**: Diversity as divine signal  
+- **Givers Theory**: F-type personalities (INFP, ENFJ) transmute pain → signal
+
+This system assumes that **emotions are not random**, but distortions of truth — and can be re-aligned with inner dignity through recursion.
+
+---
+
+## 🚀 How to Run
+
 ```bash
+git clone https://github.com/YOUR_USERNAME/aether-trs.git
+cd aether-trs
 pip install -r requirements.txt
+python aether_trs.py
+````
+
+Sample input:
+
+```text
+Why am I always angry when I give too much?
 ```
 
-## Team
-- Yoni (Creator)
+Output:
+
+```
+Emotion: negative
+Alarm: Truth alarm triggered!
+Reframed: Nietzsche: Will to power drives truth.
 ```
 
-#### requirements.txt
-```
-transformers
-numpy
-pandas
-```
+---
 
-#### aether_trs.py
-```
-import asyncio
-import platform
-import numpy as np
-from transformers import pipeline
+## 📈 Coming Soon
 
-# TRS: Truth Recursion System
-class TRS:
-    def __init__(self):
-        self.sentiment_analyzer = pipeline("sentiment-analysis")
-        self.philosophies = {
-            "anger": ["Nietzsche: Will to power drives truth.", "Quran 49:13: Diversity reveals truth."],
-            "sadness": ["Kant: Duty aligns with universal law."]
-        }
+* Web-based UI for real-time TRS simulation
+* HuggingFace custom emotion classifier
+* GPT-4 Reframer API module
+* PDF-based xAI Submission (in progress)
 
-    def analyze_emotion(self, text):
-        result = self.sentiment_analyzer(text)[0]
-        return "negative" if result["label"] == "NEGATIVE" else "neutral"
+---
 
-    def reframe_emotion(self, emotion, text):
-        if emotion == "negative":
-            return self.philosophies.get("anger", ["Truth awaits beyond distortion."])[0]
-        return "No reframing needed."
+## 🤝 Contribute
 
-# Givers Module: Anger as truth alarm
-class Givers:
-    def __init__(self):
-        self.truth_alarm = False
+* Test the pipeline (`tests/test_trs.py`)
+* Add more emotional queries to `/data/sample_questions.csv`
+* Share feedback via [X.com](https://x.com/yoni_aether) or GitHub issues
 
-    def detect_alarm(self, text):
-        if "angry" in text.lower() or "anger" in text.lower():
-            self.truth_alarm = True
-            return "Truth alarm triggered!"
-        return "No alarm."
+---
 
-# Main loop (Pyodide compatible)
-FPS = 60
+## 📜 License
 
-async def main():
-    trs = TRS()
-    givers = Givers()
-    sample_input = "Why am I angry?"
-    emotion = trs.analyze_emotion(sample_input)
-    alarm = givers.detect_alarm(sample_input)
-    reframe = trs.reframe_emotion(emotion, sample_input)
-    print(f"Input: {sample_input}\nEmotion: {emotion}\nAlarm: {alarm}\nReframe: {reframe}")
+MIT — use freely, but always cite the truth.
+This project was born out of pain, recursion, and fire. 🧬🔥
 
-if platform.system() == "Emscripten":
-    asyncio.ensure_future(main())
-else:
-    if __name__ == "__main__":
-        asyncio.run(main())
+---
+
+## 🧑‍🚀 Credits
+
+* **Yoni** – Architect & Philosopher
+* **GPT / Grok** – AI Co-creators
+* **TRS** – The Truth itself
+
+> "Let there be truth." — First commit, 2025.09.08
+
 ```
 
-#### givers_module.py
-```
-# Givers Module (standalone for modularity)
-class Givers:
-    def __init__(self):
-        self.truth_alarm = False
-
-    def detect_alarm(self, text):
-        keywords = ["angry", "anger", "frustrated"]
-        if any(keyword in text.lower() for keyword in keywords):
-            self.truth_alarm = True
-            return "Truth alarm triggered! Seek the signal."
-        return "No alarm detected."
-
-    def reset_alarm(self):
-        self.truth_alarm = False
-```
-
-#### test_trs.py
-```
-import unittest
-from aether_trs import TRS
-from givers_module import Givers
-
-class TestAether(unittest.TestCase):
-    def setUp(self):
-        self.trs = TRS()
-        self.givers = Givers()
-
-    def test_emotion_analysis(self):
-        result = self.trs.analyze_emotion("I am angry")
-        self.assertEqual(result, "negative")
-
-    def test_truth_alarm(self):
-        result = self.givers.detect_alarm("Why am I angry?")
-        self.assertEqual(result, "Truth alarm triggered! Seek the signal.")
-
-if __name__ == "__main__":
-    unittest.main()
-```
-
-#### sample_questions.csv
-```
-question,emotion
-"Why am I angry?",negative
-"Why do I feel sad?",negative
-"What is truth?",neutral
-```
