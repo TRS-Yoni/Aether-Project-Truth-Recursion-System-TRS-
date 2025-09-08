@@ -408,7 +408,212 @@ Alarm: No alarm.
 Reframe: Truth is not shaken by feelings; it is the ground beneath them.
 ---
 
+
 > "Let there be truth." — First commit, 2025.09.08
 
 ```
+전체 통합본: TRS v2.0 코드 (Colab 복사 붙여넣기용)
+# Colab용 Aether Project - TRS v2.0 (Truth Recursion System)
+# Transformer 기반 감정 분류기 도입
+!pip install transformers -q
+!pip install sentencepiece -q  # tokenizer 용
 
+# --- 라이브러리 임포트 ---
+from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
+from scipy.special import softmax
+import torch
+import random
+
+# --- Emotion Classifier (정밀 감정 분류) ---
+class EmotionClassifier:
+    def __init__(self):
+        model_name = "cardiffnlp/twitter-roberta-base-emotion"
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        self.labels = ['anger', 'joy', 'optimism', 'sadness', 'fear', 'love']
+
+    def classify(self, text: str) -> str:
+        inputs = self.tokenizer(text, return_tensors="pt", truncation=True, padding=True)
+        with torch.no_grad():
+            logits = self.model(**inputs).logits
+        probs = softmax(logits[0].numpy())
+        top_idx = probs.argmax()
+        return self.labels[top_idx]
+
+# --- TRS Core System ---
+class TRS:
+    def __init__(self):
+        self.classifier = EmotionClassifier()
+        self.philosophies = {
+            "anger": [
+                "Nietzsche: Anger reveals a will to power – transform it into creation.",
+                "Biblical: Righteous anger is the heat of justice, not wrath."
+            ],
+            "joy": [
+                "Khalil Gibran: Joy is your sorrow unmasked.",
+                "Buddha: Happiness never decreases by being shared."
+            ],
+            "optimism": [
+                "Marcus Aurelius: The impediment to action advances action.",
+                "Frankl: Those who have a ‘why’ can bear any ‘how’."
+            ],
+            "sadness": [
+                "Laozi: Softness overcomes hardness; water shapes stone.",
+                "Kierkegaard: The deeper the sorrow, the closer to God."
+            ],
+            "fear": [
+                "Stoic: Fear is imagination untrained by reason.",
+                "Kierkegaard: Anxiety is the dizziness of freedom."
+            ],
+            "love": [
+                "Plato: At the touch of love, everyone becomes a poet.",
+                "Bible: Perfect love drives out fear."
+            ],
+            "neutral": [
+                "Truth is not shaken by feelings; it is the ground beneath them."
+            ]
+        }
+
+    def analyze_emotion(self, text: str) -> str:
+        try:
+            emotion = self.classifier.classify(text)
+            return emotion
+        except Exception as e:
+            print(f"Emotion classification error: {e}")
+            return "neutral"
+
+    def reframe_emotion(self, emotion: str, text: str) -> str:
+        options = self.philosophies.get(emotion, self.philosophies.get("neutral", []))
+        if not options:
+            return f"Reframe: {emotion} → Seek truth."
+        return random.choice(options)
+
+# --- Givers Module ---
+class Givers:
+    def __init__(self):
+        self.truth_alarm = False
+        self.alarm_keywords = [
+            "angry", "anger", "furious", "mad", "irritated",
+            "afraid", "scared", "fear", "anxious", "anxiety",
+            "ashamed", "shame", "criticized", "rejected", "hurt"
+        ]
+
+    def detect_alarm(self, text: str) -> str:
+        t = text.lower()
+        if any(k in t for k in self.alarm_keywords):
+            self.truth_alarm = True
+            return "🔔 Truth alarm triggered! Your pain signals hidden truth."
+        return "No alarm."
+
+    def reset_alarm(self):
+        self.truth_alarm = False
+
+# --- Main Simulation ---
+def run_simulation(questions):
+    trs = TRS()
+    givers = Givers()
+    results = []
+    for q in questions:
+        emotion = trs.analyze_emotion(q)
+        alarm = givers.detect_alarm(q)
+        reframe = trs.reframe_emotion(emotion, q)
+        results.append(f"Input: {q}\nEmotion: {emotion}\nAlarm: {alarm}\nReframe: {reframe}\n---")
+    return results
+
+# --- 질문 샘플 ---
+questions = [
+    "Why do I feel invisible in groups?",
+    "Why am I afraid of being honest?",
+    "Why does love make me anxious?",
+    "Why do I shut down when criticized?",
+    "Why do I feel guilty when resting?",
+    "Why do I get angry when I'm ignored?",
+    "Why do I fear success?",
+    "Why do compliments make me uncomfortable?",
+    "Why does helping others exhaust me?",
+    "Why do I seek validation online?",
+    "Why do I panic when I lose control?",
+    "Why do I avoid conflict at all costs?",
+    "Why do I feel stuck in emotional loops?",
+    "Why do I get defensive with loved ones?"
+]
+
+# --- 실행 ---
+if __name__ == "__main__":
+    results = run_simulation(questions[:15])
+    for result in results:
+        print(result)
+
+# 저장 시: File > Download .py → GitHub 업로드 가능
+
+Asking to truncate to max_length but no maximum length is provided and the model has no predefined maximum length. Default to no truncation.
+Input: Why do I feel invisible in groups?
+Emotion: sadness
+Alarm: No alarm.
+Reframe: Kierkegaard: The deeper the sorrow, the closer to God.
+---
+Input: Why am I afraid of being honest?
+Emotion: sadness
+Alarm: 🔔 Truth alarm triggered! Your pain signals hidden truth.
+Reframe: Laozi: Softness overcomes hardness; water shapes stone.
+---
+Input: Why does love make me anxious?
+Emotion: sadness
+Alarm: 🔔 Truth alarm triggered! Your pain signals hidden truth.
+Reframe: Kierkegaard: The deeper the sorrow, the closer to God.
+---
+Input: Why do I shut down when criticized?
+Emotion: anger
+Alarm: 🔔 Truth alarm triggered! Your pain signals hidden truth.
+Reframe: Biblical: Righteous anger is the heat of justice, not wrath.
+---
+Input: Why do I feel guilty when resting?
+Emotion: sadness
+Alarm: No alarm.
+Reframe: Kierkegaard: The deeper the sorrow, the closer to God.
+---
+Input: Why do I get angry when I'm ignored?
+Emotion: anger
+Alarm: 🔔 Truth alarm triggered! Your pain signals hidden truth.
+Reframe: Nietzsche: Anger reveals a will to power – transform it into creation.
+---
+Input: Why do I fear success?
+Emotion: sadness
+Alarm: 🔔 Truth alarm triggered! Your pain signals hidden truth.
+Reframe: Laozi: Softness overcomes hardness; water shapes stone.
+---
+Input: Why do compliments make me uncomfortable?
+Emotion: anger
+Alarm: No alarm.
+Reframe: Biblical: Righteous anger is the heat of justice, not wrath.
+---
+Input: Why does helping others exhaust me?
+Emotion: anger
+Alarm: No alarm.
+Reframe: Nietzsche: Anger reveals a will to power – transform it into creation.
+---
+Input: Why do I seek validation online?
+Emotion: anger
+Alarm: No alarm.
+Reframe: Biblical: Righteous anger is the heat of justice, not wrath.
+---
+Input: Why do I panic when I lose control?
+Emotion: sadness
+Alarm: No alarm.
+Reframe: Kierkegaard: The deeper the sorrow, the closer to God.
+---
+Input: Why do I avoid conflict at all costs?
+Emotion: anger
+Alarm: No alarm.
+Reframe: Biblical: Righteous anger is the heat of justice, not wrath.
+---
+Input: Why do I feel stuck in emotional loops?
+Emotion: sadness
+Alarm: No alarm.
+Reframe: Kierkegaard: The deeper the sorrow, the closer to God.
+---
+Input: Why do I get defensive with loved ones?
+Emotion: anger
+Alarm: No alarm.
+Reframe: Nietzsche: Anger reveals a will to power – transform it into creation.
+---
