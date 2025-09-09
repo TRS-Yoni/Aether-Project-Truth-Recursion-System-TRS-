@@ -891,3 +891,458 @@ Emotion: sadness
 Alarm: No alarm.
 Reframe: Carl Jung: Even a happy life cannot be without a measure of darkness.
 ---
+
+# TRS v3.13 Simulation - English/Korean Input Version
+# Author: Yoni & GT | Last Updated: 2025-09-09
+
+# 0. Runtime note:
+# ⚠️ In Colab: Runtime → Restart runtime before running to clear cache
+
+# 1. Install required packages and update
+!apt-get update
+!apt-get install -y fonts-nanum
+!pip install --upgrade matplotlib
+!fc-cache -fv
+!rm -rf ~/.cache/matplotlib
+
+# 2. Import necessary libraries
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+import numpy as np
+from collections import Counter
+import os
+from datetime import datetime
+import unicodedata
+
+# 3. Font configuration
+nanum_fonts = [f for f in fm.findSystemFonts() if 'Nanum' in f]
+font_path = next((f for f in nanum_fonts if 'NanumGothic.ttf' in f), None)
+if font_path:
+    font_prop = fm.FontProperties(fname=font_path)
+    plt.rcParams['font.family'] = 'NanumGothic'
+    plt.rcParams['axes.unicode_minus'] = False
+    print(f"Using font: {font_path}")
+else:
+    print("ERROR: NanumGothic.ttf not found. Falling back to DejaVu Sans.")
+    plt.rcParams['font.family'] = 'DejaVu Sans'
+
+# 4. Define emotion database
+emotions = {
+    'anger': {'keywords': ['angry', 'annoyed', 'annoys', 'rage', 'mad', 'pissed', 'irritated', '화냈어', '잔소리', '짜증', '화가 나'], 'bug': 'EMO_SWAP or LOGIC_BREAK', 'wave': '~~~~~ (high frequency)', 'color': 'red'},
+    'fear': {'keywords': ['scared', 'fear', 'discrepancy', 'strange', 'weird'], 'bug': 'EMO_HEART_CONFLATE', 'wave': '~-~ (irregular wave)', 'color': 'purple'},
+    'anxiety': {'keywords': ['afraid', 'nervous', 'anxious', 'worry', '불안', '초조'], 'bug': 'ANXIETY_OVERLOAD', 'wave': '~~^~~ (erratic spikes)', 'color': 'teal'},
+    'unknown': {'keywords': ['don’t know', 'no reason', 'no idea', 'idk'], 'bug': 'UNCLEAR_SIGNAL', 'wave': '??? (unclear signal)', 'color': 'gray'},
+    'resentment': {'keywords': ['unfair', 'feels unfair', 'wronged', 'resentment', '억울'], 'bug': 'CYCLE_LOOP', 'wave': '~~--~~ (intermittent distortion)', 'color': 'darkblue'},
+    'sadness': {'keywords': ['sad', 'upset', 'cry', 'heavy', '슬퍼'], 'bug': 'MEM_DUMP', 'wave': '___ (low frequency)', 'color': 'blue'},
+    'love': {'keywords': ['love', 'loved', '연인'], 'bug': 'No bug, but check CTRL_OVR', 'wave': '~~~~ (stable wave)', 'color': 'pink'},
+    'joy': {'keywords': ['happy', 'joyful', 'glad'], 'bug': 'POSITIVE_ALIGNMENT', 'wave': '^^^ (lively wave)', 'color': 'yellow'},
+    'duty': {'keywords': ['have to', 'should', 'must', 'obliged', 'eldest', 'expectations', 'study', 'pressure', '장녀', 'family', 'role', '부담돼'], 'bug': 'DUTY_CONFLATE', 'wave': '~==~ (burden wave)', 'color': 'darkgreen'},
+    'optimism': {'keywords': ['hope', 'excited', 'looking forward'], 'bug': 'POSITIVE_ALIGNMENT', 'wave': '^_^ (positive wave)', 'color': 'lightgreen'},
+    'jealousy': {'keywords': ['jealous', 'sibling', 'brother', 'sister gets more'], 'bug': 'JEALOUSY_CONFLATE', 'wave': '~^~ (competitive wave)', 'color': 'orange'},
+    'avoidance': {'keywords': ['avoid', 'escape', 'run away', '벗어나고 싶어', '회피', '도망치고 싶어'], 'bug': 'AVOIDANCE_DESIRE', 'wave': '~...~ (intermittent pauses)', 'color': 'gray'}
+}
+
+# 5. Analyze emotion from input
+def analyze_emotion(text):
+    detected_emotions = []
+    # Normalize Korean text to handle composed/decomposed characters
+    text_normalized = unicodedata.normalize('NFKC', text)
+    text_lower = text_normalized.lower()
+    is_teen = 'teen' in text_lower
+    is_adult = 'adult' in text_lower
+    has_love = any(kw in text_lower for kw in emotions['love']['keywords'])
+    has_fear = any(kw in text_lower for kw in emotions['fear']['keywords'] + emotions['anxiety']['keywords'])
+    has_duty = any(kw in text_lower for kw in emotions['duty']['keywords'])
+    
+    # Prioritize duty for eldest-related inputs
+    if any(kw in text_lower for kw in ['eldest', '장녀', 'family', 'role']):
+        detected_emotions.append('duty')
+    
+    for emotion, data in emotions.items():
+        if any(keyword in text_lower for keyword in data['keywords']):
+            if emotion == 'fear' and has_love and has_fear:
+                detected_emotions.append('anxiety')
+            elif emotion == 'fear' and is_teen:
+                detected_emotions.append('resentment')
+            elif emotion == 'fear' and is_adult:
+                detected_emotions.append('anxiety')
+            elif emotion == 'duty' and has_duty:
+                detected_emotions.append(emotion)
+                # Add secondary emotions for duty-related inputs
+                if any(kw in text_lower for kw in ['unfair', '억울']):
+                    detected_emotions.append('resentment')
+                if any(kw in text_lower for kw in ['angry', 'annoys', '짜증', '화가 나']):
+                    detected_emotions.append('anger')
+                if any(kw in text_lower for kw in ['avoid', 'escape', '벗어나고 싶어', '회피', '도망치고 싶어']):
+                    detected_emotions.append('avoidance')
+            elif emotion != 'duty':  # Avoid duplicating duty
+                detected_emotions.append(emotion)
+    
+    if not detected_emotions:
+        detected_emotions.append('unknown')
+    if len(detected_emotions) > 2:  # Allow up to 2 emotions
+        detected_emotions = detected_emotions[:2]
+    if 'unknown' in detected_emotions and len(detected_emotions) > 1:
+        detected_emotions.remove('unknown')
+    return list(dict.fromkeys(detected_emotions))  # Remove duplicates
+
+# 6. Wave simulation
+def generate_wave(emotion, length=100):
+    t = np.linspace(0, 1, length)
+    if emotion == 'anger':
+        return np.sin(20 * np.pi * t) * np.random.uniform(0.8, 1.2, length)
+    elif emotion == 'fear':
+        return np.random.uniform(-1, 1, length)
+    elif emotion == 'anxiety':
+        return np.sin(15 * np.pi * t) * np.random.uniform(0.5, 1.5, length) * np.where(t % 0.1 < 0.05, 2, 1)
+    elif emotion == 'unknown':
+        return np.random.uniform(-0.5, 0.5, length)
+    elif emotion == 'resentment':
+        return np.sin(10 * np.pi * t) * np.where(t % 0.2 < 0.1, 1, 0)
+    elif emotion == 'sadness':
+        return np.sin(5 * np.pi * t) * 0.5
+    elif emotion == 'love':
+        return np.cos(10 * np.pi * t)
+    elif emotion == 'joy':
+        return np.sin(15 * np.pi * t) * np.abs(np.sin(5 * np.pi * t))
+    elif emotion == 'duty':
+        return np.sin(8 * np.pi * t) * np.where(t % 0.3 < 0.15, 1, 0.5)
+    elif emotion == 'optimism':
+        return np.sin(12 * np.pi * t) * np.abs(np.cos(6 * np.pi * t))
+    elif emotion == 'jealousy':
+        return np.sign(np.sin(10 * np.pi * t)) * np.abs(np.sin(5 * np.pi * t))
+    elif emotion == 'avoidance':
+        return np.sin(10 * np.pi * t) * np.where(t % 0.3 < 0.2, 0, 1)  # Intermittent pauses
+    else:
+        return np.zeros(length)
+
+# 7. Visualize emotional wave
+def plot_emotion_wave(emotion, text, timestamp):
+    plt.figure(figsize=(8, 3))
+    wave = generate_wave(emotion)
+    plt.plot(wave, color=emotions[emotion]['color'])
+    plt.title(f'{emotion} 감정 주파수: {text[:20]}...', fontproperties=font_prop if font_path else None)
+    plt.xlabel('시간', fontproperties=font_prop if font_path else None)
+    plt.ylabel('진폭', fontproperties=font_prop if font_path else None)
+    filename = f'freq_{emotion}_{timestamp}.png'
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+    return filename
+
+# 8. TRS Reframe logic
+def get_reframe(emotion, text):
+    family_keywords = ['mom', 'mother', 'dad', 'father', 'parents', 'sibling', 'brother', 'sister', 'eldest', 'mother-in-law', 'unfair', '아빠', '엄마', '연인', '장녀', 'family', 'role', '가족']
+    relationship_keywords = ['love', 'loved', 'afraid', 'scared', '불안', '연인']
+    text_normalized = unicodedata.normalize('NFKC', text)
+    text_lower = text_normalized.lower()
+    is_teen = 'teen' in text_lower
+    is_adult = 'adult' in text_lower
+    
+    if any(keyword in text_lower for keyword in family_keywords + relationship_keywords):
+        if emotion == 'anger':
+            return "Korean culture tip: Anger from unfair pressure is valid. Voice it calmly to reconnect."
+        if emotion == 'fear':
+            return "Korean culture tip: Fear can signal a need for closer bonds. Speak openly to connect."
+        if emotion == 'anxiety':
+            return "Korean culture tip: Anxiety about losing connection clouds love. Share your heart to rebuild trust."
+        if emotion == 'resentment':
+            return "Korean culture tip: Feeling unfair as the eldest is real. Share to release the weight."
+        if emotion == 'duty':
+            return "Korean culture tip: Pressure as the eldest comes from love and expectations. Share your burden to find balance."
+        if emotion == 'jealousy':
+            return "Korean culture tip: Siblings aren’t rivals in truth. Your unique value shines through."
+        if emotion == 'love':
+            return "Korean culture tip: Love grows when you trust and speak openly."
+        if emotion == 'sadness':
+            return "Korean culture tip: Your heart’s weight is real, but you’re not alone. Share to lighten the load."
+        if emotion == 'joy':
+            return "Korean culture tip: Sharing joy with family deepens your bonds."
+        if emotion == 'optimism':
+            return "Korean culture tip: Hope builds bridges with loved ones. Let it shine."
+        if emotion == 'avoidance':
+            return "Korean culture tip: Wanting to escape pressure is natural. Talk to redefine your role."
+        return "Korean culture tip: Honest communication strengthens relationships. Speak your truth."
+    
+    if is_teen and emotion == 'resentment':
+        return "Korean culture tip: As a teen, frustration often hides a need for understanding. Share to find clarity."
+    if is_adult and emotion == 'anxiety':
+        return "Korean culture tip: As an adult, anxiety signals a gap in connection. Reflect and realign."
+    
+    if emotion == 'unknown':
+        return "Biblical: Even in silence, truth grows."
+    if emotion == 'resentment':
+        return "TRS: Break the cycle of past pain. Focus on the now."
+    if emotion == 'sadness':
+        return "Laozi: The soft outlasts the strong. Embrace instead of break."
+    if emotion == 'love':
+        return "Truth: Love is strength when you choose who to trust."
+    if emotion == 'joy' or emotion == 'optimism':
+        return "TRS: Joy aligned with truth is clarity, not delusion. Hold onto it."
+    if emotion == 'fear':
+        return "TRS: Fear signals a gap in understanding. Trace it to find truth."
+    if emotion == 'anxiety':
+        return "TRS: Anxiety signals overload. Pause and trace the source."
+    if emotion == 'duty':
+        return "TRS: Duty without desire breeds bitterness. Balance it."
+    if emotion == 'jealousy':
+        return "TRS: Jealousy is love’s misfire. Refocus on what’s truly yours."
+    if emotion == 'avoidance':
+        return "TRS: Wanting to escape is a signal. Trace it to redefine your path."
+    return "Nietzsche: Chaos is the prelude to clarity."
+
+# 9. Run TRS simulation
+inputs = [
+    "Mom got angry, so I’m scared",
+    "I don’t know, no reason but I’m sad",
+    "I feel unfair and angry",
+    "I don’t know why I feel this way",
+    "I’m so upset I could die",
+    "I love but I’m afraid",
+    "I’m happy for no reason",
+    "Parents told me to study, so I feel unfair",
+    "I’m excited for tomorrow",
+    "My sibling gets more love",
+    "I have to do it because of parents’ expectations",
+    "My sibling gets more love, so I feel unfair",
+    "I’m upset because of my brother",
+    "Mother-in-law’s nagging annoys me",
+    "Being the eldest son feels heavy",
+    "I feel pressured as the eldest daughter",
+    "아빠가 화냈어",
+    "엄마가 잔소리해",
+    "연인 때문에 불안해",
+    "장녀라서 부담돼",
+    "가족 때문에 억울해",
+    "장녀 역할 벗어나고 싶어"
+]
+
+emotion_counts = Counter()
+bug_counts = Counter()
+timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+log_lines = []
+
+for text in inputs:
+    detected_emotions = analyze_emotion(text)
+    print(f"\n====== TRS Simulation Result ======")
+    print(f"📥 Input: {text}")
+    
+    for emotion in detected_emotions:
+        bug = emotions[emotion]['bug']
+        wave = emotions[emotion]['wave']
+        filename = plot_emotion_wave(emotion, text, timestamp)
+        reframe = get_reframe(emotion, text)
+
+        prefix = "🟢 Primary Emotion" if emotion == detected_emotions[0] else "🟡 Secondary Emotion"
+        print(f"{prefix}: {emotion}")
+        print(f"🐞 Bug Tag: {bug}")
+        print(f"📊 Frequency: {wave} (Saved: {filename})")
+        print(f"🔄 TRS Reframe: {reframe}")
+        
+        log_lines.append(f"[{timestamp}] {text} | Emotion: {emotion} | Bug: {bug} | Wave: {wave} | Reframe: {reframe}")
+        emotion_counts[emotion] += 1
+        bug_counts[bug] += 1
+
+# 10. Save session log
+with open('trs_log.txt', 'w', encoding='utf-8') as f:
+    for line in log_lines:
+        f.write(line + '\n')
+
+# 11. Print summary stats
+print("\n📊 Summary Statistics:")
+print("Emotion Distribution:", dict(emotion_counts))
+print("Bug Distribution:", dict(bug_counts))
+
+====== TRS Simulation Result ======
+📥 Input: Mom got angry, so I’m scared
+🟢 Primary Emotion: anger
+🐞 Bug Tag: EMO_SWAP or LOGIC_BREAK
+📊 Frequency: ~~~~~ (high frequency) (Saved: freq_anger_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Anger from unfair pressure is valid. Voice it calmly to reconnect.
+🟡 Secondary Emotion: fear
+🐞 Bug Tag: EMO_HEART_CONFLATE
+📊 Frequency: ~-~ (irregular wave) (Saved: freq_fear_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Fear can signal a need for closer bonds. Speak openly to connect.
+
+====== TRS Simulation Result ======
+📥 Input: I don’t know, no reason but I’m sad
+🟢 Primary Emotion: sadness
+🐞 Bug Tag: MEM_DUMP
+📊 Frequency: ___ (low frequency) (Saved: freq_sadness_20250909_075431.png)
+🔄 TRS Reframe: Laozi: The soft outlasts the strong. Embrace instead of break.
+
+====== TRS Simulation Result ======
+📥 Input: I feel unfair and angry
+🟢 Primary Emotion: anger
+🐞 Bug Tag: EMO_SWAP or LOGIC_BREAK
+📊 Frequency: ~~~~~ (high frequency) (Saved: freq_anger_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Anger from unfair pressure is valid. Voice it calmly to reconnect.
+🟡 Secondary Emotion: resentment
+🐞 Bug Tag: CYCLE_LOOP
+📊 Frequency: ~~--~~ (intermittent distortion) (Saved: freq_resentment_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Feeling unfair as the eldest is real. Share to release the weight.
+
+====== TRS Simulation Result ======
+📥 Input: I don’t know why I feel this way
+🟢 Primary Emotion: unknown
+🐞 Bug Tag: UNCLEAR_SIGNAL
+📊 Frequency: ??? (unclear signal) (Saved: freq_unknown_20250909_075431.png)
+🔄 TRS Reframe: Biblical: Even in silence, truth grows.
+
+====== TRS Simulation Result ======
+📥 Input: I’m so upset I could die
+🟢 Primary Emotion: sadness
+🐞 Bug Tag: MEM_DUMP
+📊 Frequency: ___ (low frequency) (Saved: freq_sadness_20250909_075431.png)
+🔄 TRS Reframe: Laozi: The soft outlasts the strong. Embrace instead of break.
+
+====== TRS Simulation Result ======
+📥 Input: I love but I’m afraid
+🟢 Primary Emotion: anxiety
+🐞 Bug Tag: ANXIETY_OVERLOAD
+📊 Frequency: ~~^~~ (erratic spikes) (Saved: freq_anxiety_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Anxiety about losing connection clouds love. Share your heart to rebuild trust.
+🟡 Secondary Emotion: love
+🐞 Bug Tag: No bug, but check CTRL_OVR
+📊 Frequency: ~~~~ (stable wave) (Saved: freq_love_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Love grows when you trust and speak openly.
+
+====== TRS Simulation Result ======
+📥 Input: I’m happy for no reason
+🟢 Primary Emotion: joy
+🐞 Bug Tag: POSITIVE_ALIGNMENT
+📊 Frequency: ^^^ (lively wave) (Saved: freq_joy_20250909_075431.png)
+🔄 TRS Reframe: TRS: Joy aligned with truth is clarity, not delusion. Hold onto it.
+
+====== TRS Simulation Result ======
+📥 Input: Parents told me to study, so I feel unfair
+🟢 Primary Emotion: resentment
+🐞 Bug Tag: CYCLE_LOOP
+📊 Frequency: ~~--~~ (intermittent distortion) (Saved: freq_resentment_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Feeling unfair as the eldest is real. Share to release the weight.
+🟡 Secondary Emotion: duty
+🐞 Bug Tag: DUTY_CONFLATE
+📊 Frequency: ~==~ (burden wave) (Saved: freq_duty_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Pressure as the eldest comes from love and expectations. Share your burden to find balance.
+
+====== TRS Simulation Result ======
+📥 Input: I’m excited for tomorrow
+🟢 Primary Emotion: optimism
+🐞 Bug Tag: POSITIVE_ALIGNMENT
+📊 Frequency: ^_^ (positive wave) (Saved: freq_optimism_20250909_075431.png)
+🔄 TRS Reframe: TRS: Joy aligned with truth is clarity, not delusion. Hold onto it.
+
+====== TRS Simulation Result ======
+📥 Input: My sibling gets more love
+🟢 Primary Emotion: love
+🐞 Bug Tag: No bug, but check CTRL_OVR
+📊 Frequency: ~~~~ (stable wave) (Saved: freq_love_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Love grows when you trust and speak openly.
+🟡 Secondary Emotion: jealousy
+🐞 Bug Tag: JEALOUSY_CONFLATE
+📊 Frequency: ~^~ (competitive wave) (Saved: freq_jealousy_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Siblings aren’t rivals in truth. Your unique value shines through.
+
+====== TRS Simulation Result ======
+📥 Input: I have to do it because of parents’ expectations
+🟢 Primary Emotion: duty
+🐞 Bug Tag: DUTY_CONFLATE
+📊 Frequency: ~==~ (burden wave) (Saved: freq_duty_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Pressure as the eldest comes from love and expectations. Share your burden to find balance.
+
+====== TRS Simulation Result ======
+📥 Input: My sibling gets more love, so I feel unfair
+🟢 Primary Emotion: resentment
+🐞 Bug Tag: CYCLE_LOOP
+📊 Frequency: ~~--~~ (intermittent distortion) (Saved: freq_resentment_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Feeling unfair as the eldest is real. Share to release the weight.
+🟡 Secondary Emotion: love
+🐞 Bug Tag: No bug, but check CTRL_OVR
+📊 Frequency: ~~~~ (stable wave) (Saved: freq_love_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Love grows when you trust and speak openly.
+
+====== TRS Simulation Result ======
+📥 Input: I’m upset because of my brother
+🟢 Primary Emotion: sadness
+🐞 Bug Tag: MEM_DUMP
+📊 Frequency: ___ (low frequency) (Saved: freq_sadness_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Your heart’s weight is real, but you’re not alone. Share to lighten the load.
+🟡 Secondary Emotion: jealousy
+🐞 Bug Tag: JEALOUSY_CONFLATE
+📊 Frequency: ~^~ (competitive wave) (Saved: freq_jealousy_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Siblings aren’t rivals in truth. Your unique value shines through.
+
+====== TRS Simulation Result ======
+📥 Input: Mother-in-law’s nagging annoys me
+🟢 Primary Emotion: anger
+🐞 Bug Tag: EMO_SWAP or LOGIC_BREAK
+📊 Frequency: ~~~~~ (high frequency) (Saved: freq_anger_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Anger from unfair pressure is valid. Voice it calmly to reconnect.
+
+====== TRS Simulation Result ======
+📥 Input: Being the eldest son feels heavy
+🟢 Primary Emotion: duty
+🐞 Bug Tag: DUTY_CONFLATE
+📊 Frequency: ~==~ (burden wave) (Saved: freq_duty_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Pressure as the eldest comes from love and expectations. Share your burden to find balance.
+🟡 Secondary Emotion: sadness
+🐞 Bug Tag: MEM_DUMP
+📊 Frequency: ___ (low frequency) (Saved: freq_sadness_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Your heart’s weight is real, but you’re not alone. Share to lighten the load.
+
+====== TRS Simulation Result ======
+📥 Input: I feel pressured as the eldest daughter
+🟢 Primary Emotion: duty
+🐞 Bug Tag: DUTY_CONFLATE
+📊 Frequency: ~==~ (burden wave) (Saved: freq_duty_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Pressure as the eldest comes from love and expectations. Share your burden to find balance.
+
+====== TRS Simulation Result ======
+📥 Input: 아빠가 화냈어
+🟢 Primary Emotion: anger
+🐞 Bug Tag: EMO_SWAP or LOGIC_BREAK
+📊 Frequency: ~~~~~ (high frequency) (Saved: freq_anger_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Anger from unfair pressure is valid. Voice it calmly to reconnect.
+
+====== TRS Simulation Result ======
+📥 Input: 엄마가 잔소리해
+🟢 Primary Emotion: anger
+🐞 Bug Tag: EMO_SWAP or LOGIC_BREAK
+📊 Frequency: ~~~~~ (high frequency) (Saved: freq_anger_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Anger from unfair pressure is valid. Voice it calmly to reconnect.
+
+====== TRS Simulation Result ======
+📥 Input: 연인 때문에 불안해
+🟢 Primary Emotion: anxiety
+🐞 Bug Tag: ANXIETY_OVERLOAD
+📊 Frequency: ~~^~~ (erratic spikes) (Saved: freq_anxiety_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Anxiety about losing connection clouds love. Share your heart to rebuild trust.
+🟡 Secondary Emotion: love
+🐞 Bug Tag: No bug, but check CTRL_OVR
+📊 Frequency: ~~~~ (stable wave) (Saved: freq_love_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Love grows when you trust and speak openly.
+
+====== TRS Simulation Result ======
+📥 Input: 장녀라서 부담돼
+🟢 Primary Emotion: duty
+🐞 Bug Tag: DUTY_CONFLATE
+📊 Frequency: ~==~ (burden wave) (Saved: freq_duty_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Pressure as the eldest comes from love and expectations. Share your burden to find balance.
+
+====== TRS Simulation Result ======
+📥 Input: 가족 때문에 억울해
+🟢 Primary Emotion: resentment
+🐞 Bug Tag: CYCLE_LOOP
+📊 Frequency: ~~--~~ (intermittent distortion) (Saved: freq_resentment_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Feeling unfair as the eldest is real. Share to release the weight.
+
+====== TRS Simulation Result ======
+📥 Input: 장녀 역할 벗어나고 싶어
+🟢 Primary Emotion: duty
+🐞 Bug Tag: DUTY_CONFLATE
+📊 Frequency: ~==~ (burden wave) (Saved: freq_duty_20250909_075431.png)
+🔄 TRS Reframe: Korean culture tip: Pressure as the eldest comes from love and expectations. Share your burden to find balance.
+
+📊 Summary Statistics:
+Emotion Distribution: {'anger': 5, 'fear': 1, 'sadness': 4, 'resentment': 4, 'unknown': 1, 'anxiety': 2, 'love': 4, 'joy': 1, 'duty': 6, 'optimism': 1, 'jealousy': 2}
+Bug Distribution: {'EMO_SWAP or LOGIC_BREAK': 5, 'EMO_HEART_CONFLATE': 1, 'MEM_DUMP': 4, 'CYCLE_LOOP': 4, 'UNCLEAR_SIGNAL': 1, 'ANXIETY_OVERLOAD': 2, 'No bug, but check CTRL_OVR': 4, 'POSITIVE_ALIGNMENT': 2, 'DUTY_CONFLATE': 6, 'JEALOUSY_CONFLATE': 2}
